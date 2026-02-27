@@ -1,0 +1,16 @@
+{
+  "files": {
+    "main.css": "/static/css/main.ec938c08.css",
+    "main.js": "/static/js/main.3e9ef046.js",
+    "static/media/Twilight.mp3": "/static/media/Twilight.bdf2695b5c8ea9d5e667.mp3",
+    "static/media/Borderline.mp3": "/static/media/Borderline.bc3510e39223fd9a0009.mp3",
+    "static/media/borderline.webp": "/static/media/borderline.0b3724d0d78c8186441f.webp",
+    "index.html": "/index.html",
+    "main.ec938c08.css.map": "/static/css/main.ec938c08.css.map",
+    "main.3e9ef046.js.map": "/static/js/main.3e9ef046.js.map"
+  },
+  "entrypoints": [
+    "static/css/main.ec938c08.css",
+    "static/js/main.3e9ef046.js"
+  ]
+}

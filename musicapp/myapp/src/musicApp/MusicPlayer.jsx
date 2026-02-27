@@ -1,0 +1,458 @@
+import React, { useEffect, useRef, useState } from "react";
+import { Play, Pause, SkipForward, SkipBack, Heart, Star, Plus, Edit2, Trash2 } from "lucide-react";
+import { motion } from "framer-motion";
+import "./MusicPlayer.css";
+
+import borderlineCover from "./borderline.webp";
+import borderlineurl from "./Borderline.mp3";
+import TwilightCover from "./Twilight.jpeg";
+import Twilighturl from "./Twilight.mp3";
+
+export default function MusicPlayerApp() {
+  const defaultSongs = [
+    {
+      id: "s1",
+      title: "BorderLine",
+      artist: "tame impala",
+      cover: borderlineCover,
+      url: borderlineurl,
+    },
+    {
+      id: "s2",
+      title: "Twilight",
+      artist: "bôa",
+      cover: TwilightCover,
+      url: Twilighturl,
+    },
+    {
+      id: "s3",
+      title: "Sunrise Sketches",
+      artist: "Paper Planes",
+      cover:"https://images.unsplash.com/photo-1493815793587-4b9526de6d30?auto=format&fit=crop&w=800&q=60",
+      url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3",
+    },
+  ];
+
+  const [songs, setSongs] = useState(defaultSongs);
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const [volume, setVolume] = useState(0.8);
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [editingId, setEditingId] = useState(null);
+  const [formData, setFormData] = useState({ title: "", artist: "", cover: "", url: "" });
+  const [ratings, setRatings] = useState(() => {
+    try {
+      const raw = localStorage.getItem("music_player_ratings");
+      return raw ? JSON.parse(raw) : {};
+    } catch (e) {
+      return {};
+    }
+  });
+
+  const audioRef = useRef(null);
+
+  // Add or update song
+  function handleSaveSong() {
+    if (!formData.title || !formData.artist || !formData.cover || !formData.url) {
+      alert("Please fill in all fields");
+      return;
+    }
+
+    if (editingId) {
+      setSongs(songs.map(s => s.id === editingId ? { ...s, ...formData } : s));
+      setEditingId(null);
+    } else {
+      const newSong = {
+        id: `s${Date.now()}`,
+        ...formData
+      };
+      setSongs([...songs, newSong]);
+    }
+
+    setFormData({ title: "", artist: "", cover: "", url: "" });
+    setShowAddForm(false);
+  }
+
+  // Edit song
+  function handleEditSong(song) {
+    setFormData(song);
+    setEditingId(song.id);
+    setShowAddForm(true);
+  }
+
+  // Delete song
+  function handleDeleteSong(id) {
+    if (window.confirm("Delete this song?")) {
+      const newSongs = songs.filter(s => s.id !== id);
+      setSongs(newSongs);
+      if (currentIndex >= newSongs.length) {
+        setCurrentIndex(Math.max(0, newSongs.length - 1));
+      }
+    }
+  }
+
+  // Cancel form
+  function handleCancelForm() {
+    setShowAddForm(false);
+    setEditingId(null);
+    setFormData({ title: "", artist: "", cover: "", url: "" });
+  }
+
+  // Sync audio source when index changes
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    audio.src = songs[currentIndex].url;
+    audio.load();
+    setProgress(0);
+    setDuration(0);
+    if (isPlaying) {
+      const p = audio.play();
+      if (p && p.catch) p.catch(() => setIsPlaying(false));
+    }
+  }, [currentIndex]);
+
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    const timeUpdate = () => setProgress(audio.currentTime);
+    const loadedMeta = () => setDuration(audio.duration || 0);
+    const ended = () => handleNext();
+
+    audio.addEventListener("timeupdate", timeUpdate);
+    audio.addEventListener("loadedmetadata", loadedMeta);
+    audio.addEventListener("ended", ended);
+
+    return () => {
+      audio.removeEventListener("timeupdate", timeUpdate);
+      audio.removeEventListener("loadedmetadata", loadedMeta);
+      audio.removeEventListener("ended", ended);
+    };
+  }, [currentIndex, songs.length]);
+
+  // ratings
+  useEffect(() => {
+    localStorage.setItem("music_player_ratings", JSON.stringify(ratings));
+  }, [ratings]);
+
+  // Play/pause
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    audio.volume = volume;
+    if (isPlaying) {
+      const p = audio.play();
+      if (p && p.catch) p.catch(() => setIsPlaying(false));
+    } else {
+      audio.pause();
+    }
+  }, [isPlaying, volume]);
+
+  function togglePlay() {
+    setIsPlaying((s) => !s);
+  }
+
+  function handlePrev() {
+    setCurrentIndex((i) => (i === 0 ? songs.length - 1 : i - 1));
+  }
+
+  function handleNext() {
+    setCurrentIndex((i) => (i === songs.length - 1 ? 0 : i + 1));
+  }
+
+  function handleSeek(e) {
+    const audio = audioRef.current;
+    const rect = e.target.getBoundingClientRect();
+    const percent = (e.clientX - rect.left) / rect.width;
+    const time = Math.max(0, Math.min(duration, percent * duration));
+    audio.currentTime = time;
+    setProgress(time);
+  }
+
+  function formatTime(t) {
+    if (!t || isNaN(t)) return "0:00";
+    const m = Math.floor(t / 60);
+    const s = Math.floor(t % 60)
+      .toString()
+      .padStart(2, "0");
+    return `${m}:${s}`;
+  }
+
+  function rateSong(id, value) {
+    setRatings((r) => ({ ...r, [id]: value }));
+  }
+///
+  function detectSource(url) {
+  if (url.includes("youtube.com") || url.includes("youtu.be")) {
+    return "youtube";
+  }
+  if (url.endsWith(".mp3")) {
+    return "mp3";
+  }
+  return "invalid";
+}
+///
+
+
+  return (
+    <div className="player-container">
+      <div className="player-wrapper">
+        {/* Add/Edit */}
+        {showAddForm && (
+          <div className="modal-overlay" onClick={handleCancelForm}>
+            <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+              <h2 style={{ marginBottom: "1.5rem", color: "white", fontSize: "1.5rem" }}>
+                {editingId ? "Edit Song" : "Add New Song"}
+              </h2>
+              <form style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+                <input
+                  type="text"
+                  placeholder="Song Title"
+                  value={formData.title}
+                  onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                  className="form-input"
+                />
+                <input
+                  type="text"
+                  placeholder="Artist Name"
+                  value={formData.artist}
+                  onChange={(e) => setFormData({ ...formData, artist: e.target.value })}
+                  className="form-input"
+                />
+                <input
+                  type="text"
+                  placeholder="Cover URL (image link)"
+                  value={formData.cover}
+                  onChange={(e) => setFormData({ ...formData, cover: e.target.value })}
+                  className="form-input"
+                />
+                <input
+                  type="text"
+                  placeholder="Audio URL (mp3 link)"
+                  value={formData.url}
+                  onChange={(e) => setFormData({ ...formData, url: e.target.value })}
+                  className="form-input"
+                />
+                <div style={{ display: "flex", gap: "1rem", marginTop: "1rem" }}>
+                  <button
+                    type="button"
+                    onClick={handleSaveSong}
+                    className="btn-primary"
+                  >
+                    {editingId ? "Update" : "Add"} Song
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleCancelForm}
+                    className="btn-secondary"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "1.5rem" }}>
+          {/* Player Card */}
+          <motion.div
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="player-card"
+            style={{ gridColumn: "1 / 3" }}
+          >
+            <div className="player-content">
+              <div className="album-cover">
+                <img
+                  src={songs[currentIndex].cover}
+                  alt="cover"
+                />
+              </div>
+
+              <div className="song-info">
+                <h2 className="song-title">
+                  {songs[currentIndex].title}
+                </h2>
+                <p className="song-artist">
+                {songs[currentIndex].artist}
+                </p>
+
+                <div className="progress-container">
+                  <div
+                    className="progress-bar"
+                    onClick={handleSeek}
+                  >
+                    <div
+                      style={{ width: duration ? `${(progress / duration) * 100}%` : "0%" }}
+                      className="progress-fill"
+                    />
+                  </div>
+                  <div className="time-display">
+                    <span>{formatTime(progress)}</span>
+                    <span>{formatTime(duration)}</span>
+                  </div>
+                </div>
+
+                <div className="controls">
+                  <button
+                    onClick={handlePrev}
+                    className="control-button"
+                    title="Previous"
+                  >
+                  <SkipBack size={18} />
+                </button>
+
+                <button
+                  onClick={togglePlay}
+                  className="play-button"
+                >
+                  {isPlaying ? <Pause size={24} /> : <Play size={24} />}
+                </button>
+
+                <button
+                  onClick={handleNext}
+                  className="control-button"
+                  title="Next"
+                >
+                  <SkipForward size={18} />
+                </button>
+
+                <div className="volume-control">
+                  <Heart size={18} style={{ color: "#ec4899" }} />
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                    <label style={{ color: "#cbd5e1", fontSize: "0.875rem" }}>Vol</label>
+                    <input
+                      type="range"
+                      min="0"
+                      max="1"
+                      step="0.01"
+                      value={volume}
+                      onChange={(e) => setVolume(Number(e.target.value))}
+                      className="volume-slider"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="rating-section">
+                <p className="rating-label">Rate this track:</p>
+                <div className="star-rating">
+                  {[1, 2, 3, 4, 5].map((i) => (
+                    <button
+                      key={i}
+                      onClick={() => rateSong(songs[currentIndex].id, i)}
+                      className="star-button"
+                      title={`Rate ${i}`}
+                    >
+                      <Star
+                        size={18}
+                        className={
+                          ratings[songs[currentIndex].id] >= i ? "star-icon star-filled" : "star-icon star-empty"
+                        }
+                      />
+                    </button>
+                  ))}
+                </div>
+                <div className="rating-value">
+                  {ratings[songs[currentIndex].id]
+                    ? `${ratings[songs[currentIndex].id]} / 5`
+                    : "Not rated"}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="up-next-section">
+            <h3 className="up-next-title">Up next</h3>
+            <div className="up-next-list">
+              {songs.map((s, idx) => (
+                <div key={s.id}
+                  onClick={() => setCurrentIndex(idx)}
+                  className={`playlist-item ${idx === currentIndex ? "active" : ""}`}
+                >
+                  <img src={s.cover} alt={s.title} className="playlist-item-cover" />
+                  <div className="playlist-item-info">
+                    <div className="playlist-item-title">{s.title}</div>
+                    <div className="playlist-item-artist">{s.artist}</div>
+                  </div>
+                  <div className="playlist-item-rating">{ratings[s.id] ? `${ratings[s.id]}/5` : "—"}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </motion.div>
+
+        {/* Library Card */}
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="library-card"
+        >
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
+            <h3 className="library-title">Library</h3>
+            <button
+              onClick={() => setShowAddForm(true)}
+              className="btn-add-song"
+              title="Add new song"
+            >
+              <Plus size={18} />
+            </button>
+          </div>
+          <div className="library-list">
+            {songs.map((s, idx) => (
+              <div
+                key={s.id}
+                className={`library-item ${idx === currentIndex ? "active" : ""}`}
+                style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}
+              >
+                <div
+                  onClick={() => setCurrentIndex(idx)}
+                  style={{ flex: 1, display: "flex", alignItems: "center", gap: "0.75rem" }}
+                >
+                  <img src={s.cover} alt="cover" className="library-item-cover" />
+                  <div className="library-item-info">
+                    <div className="library-item-title">{s.title}</div>
+                    <div className="library-item-artist">{s.artist}</div>
+                  </div>
+                </div>
+                <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+                  <div className="library-item-rating">{ratings[s.id] ? `${ratings[s.id]}/5` : "—"}</div>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleEditSong(s);
+                    }}
+                    className="btn-icon-edit"
+                    title="Edit song"
+                  >
+                    <Edit2 size={14} />
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDeleteSong(s.id);
+                    }}
+                    className="btn-icon-delete"
+                    title="Delete song"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="library-footer">
+            Click a track to play it. Ratings are saved locally in your browser.
+          </div>
+        </motion.div>
+
+        <audio ref={audioRef} />
+        </div>
+      </div>
+    </div>
+  );
+}
